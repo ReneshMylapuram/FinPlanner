@@ -24,18 +24,23 @@ const App: React.FC = () => {
 
   const fetchUserData = async (userId: string, email: string) => {
     try {
+      console.log("Fetching user data for:", userId);
       // Fetch Profile
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
+
+      if (profileError) console.error("Profile fetch error:", profileError);
 
       // Fetch Goals
-      const { data: goalsData } = await supabase
+      const { data: goalsData, error: goalsError } = await supabase
         .from('goals')
         .select('*')
         .eq('user_id', userId);
+
+      if (goalsError) console.error("Goals fetch error:", goalsError);
 
       const mappedProfile: UserProfile | undefined = profileData ? {
         age: profileData.age,
@@ -64,47 +69,94 @@ const App: React.FC = () => {
         goals: mappedGoals
       });
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      console.error("Critical error in fetchUserData:", error);
     }
   };
 
   const refreshUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await fetchUserData(session.user.id, session.user.email!);
-    } else {
-      setUser(null);
-    }
-  };
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
 
-  useEffect(() => {
-    // Initial session check
-    refreshUser().then(() => setLoading(false));
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         await fetchUserData(session.user.id, session.user.email!);
       } else {
         setUser(null);
       }
-      setLoading(false);
+    } catch (error) {
+      console.error("Error refreshing session:", error);
+      setUser(null);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        await refreshUser();
+      } catch (e) {
+        console.error("Initialization failed during refreshUser:", e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    init();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state change detected:", event);
+      if (!mounted) return;
+      
+      setLoading(true);
+      try {
+        if (session?.user) {
+          await fetchUserData(session.user.id, session.user.email!);
+        } else {
+          setUser(null);
+        }
+      } catch (e) {
+        console.error("Error handling auth change:", e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety timeout: If still loading after 6 seconds, force stop the spinner
+    // This prevents the "blank screen" if the DB connection is slow or blocked
+    const timer = setTimeout(() => {
+      if (loading && mounted) {
+        console.warn("Loading timeout reached. Forcing UI mount to prevent blank screen.");
+        setLoading(false);
+      }
+    }, 6000);
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+    } catch (e) {
+      console.error("Sign out error:", e);
+    }
   };
 
   const value = useMemo(() => ({ user, loading, logout, refreshUser }), [user, loading]);
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-400 font-medium text-sm animate-pulse tracking-wide">Connecting to horizon...</p>
+        </div>
       </div>
     );
   }
@@ -137,6 +189,7 @@ const App: React.FC = () => {
             path="/settings" 
             element={user ? <SettingsPage /> : <Navigate to="/auth" />} 
           />
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Router>
       
