@@ -1,8 +1,8 @@
 import React, { useContext, memo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../App';
+import { AuthContext } from '../App.tsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import VisualBackground from './VisualBackground';
+import VisualBackground from './VisualBackground.tsx';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useContext(AuthContext);

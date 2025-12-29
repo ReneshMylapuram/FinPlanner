@@ -1,15 +1,14 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-import { User, UserProfile, Goal, TimeHorizon } from './types';
-import LandingPage from './pages/LandingPage';
-import AuthPage from './pages/AuthPage';
-import DashboardPage from './pages/DashboardPage';
-import ProfilePage from './pages/ProfilePage';
-import GoalsPage from './pages/GoalsPage';
-import PlanPage from './pages/PlanPage';
-import SettingsPage from './pages/SettingsPage';
-import { supabase } from './lib/supabase';
+import { User, UserProfile, Goal, TimeHorizon } from './types.ts';
+import LandingPage from './pages/LandingPage.tsx';
+import AuthPage from './pages/AuthPage.tsx';
+import DashboardPage from './pages/DashboardPage.tsx';
+import ProfilePage from './pages/ProfilePage.tsx';
+import GoalsPage from './pages/GoalsPage.tsx';
+import PlanPage from './pages/PlanPage.tsx';
+import SettingsPage from './pages/SettingsPage.tsx';
+import { supabase } from './lib/supabase.ts';
 
 // Real Supabase Auth Context
 export const AuthContext = React.createContext<{

@@ -1,7 +1,6 @@
-
 import React, { useContext, memo } from 'react';
-import Layout from '../components/Layout';
-import { AuthContext } from '../App';
+import Layout from '../components/Layout.tsx';
+import { AuthContext } from '../App.tsx';
 import { Link } from 'react-router-dom';
 import { motion, Variants } from 'framer-motion';
 

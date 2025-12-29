@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import VisualBackground from '../components/VisualBackground';
+import VisualBackground from '../components/VisualBackground.tsx';
 
 const LandingPage: React.FC = () => {
   return (
