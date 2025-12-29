@@ -39,6 +39,10 @@
           }
         }
     </style>
+    <script>
+      // Polyfill 'process' for browser environments to prevent crashes on process.env access
+      window.process = window.process || { env: {} };
+    </script>
 <script type="importmap">
 {
   "imports": {
