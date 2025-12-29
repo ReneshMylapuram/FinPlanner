@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { User, UserProfile, Goal, TimeHorizon } from './types.ts';
 import LandingPage from './pages/LandingPage.tsx';
@@ -22,7 +22,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserData = async (userId: string, email: string) => {
+  const fetchUserData = useCallback(async (userId: string, email: string) => {
     try {
       console.log("Fetching user data for:", userId);
       // Fetch Profile
@@ -70,10 +70,12 @@ const App: React.FC = () => {
       });
     } catch (error) {
       console.error("Critical error in fetchUserData:", error);
+      // Even if data fetch fails, we should still allow the user to be "logged in" with an empty profile
+      setUser(prev => prev || { id: userId, email, name: email.split('@')[0], goals: [] });
     }
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
@@ -87,7 +89,7 @@ const App: React.FC = () => {
       console.error("Error refreshing session:", error);
       setUser(null);
     }
-  };
+  }, [fetchUserData]);
 
   useEffect(() => {
     let mounted = true;
@@ -96,7 +98,7 @@ const App: React.FC = () => {
       try {
         await refreshUser();
       } catch (e) {
-        console.error("Initialization failed during refreshUser:", e);
+        console.error("Initialization failed:", e);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -106,38 +108,33 @@ const App: React.FC = () => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth state change detected:", event);
+      console.log("Auth state change:", event);
       if (!mounted) return;
       
-      setLoading(true);
-      try {
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
           await fetchUserData(session.user.id, session.user.email!);
-        } else {
-          setUser(null);
         }
-      } catch (e) {
-        console.error("Error handling auth change:", e);
-      } finally {
-        if (mounted) setLoading(false);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
       }
+      
+      setLoading(false);
     });
 
-    // Safety timeout: If still loading after 6 seconds, force stop the spinner
-    // This prevents the "blank screen" if the DB connection is slow or blocked
+    // Final safety timeout to ensure app doesn't stay white forever
     const timer = setTimeout(() => {
-      if (loading && mounted) {
-        console.warn("Loading timeout reached. Forcing UI mount to prevent blank screen.");
+      if (mounted && loading) {
         setLoading(false);
       }
-    }, 6000);
+    }, 5000);
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
       clearTimeout(timer);
     };
-  }, []);
+  }, [refreshUser, fetchUserData]);
 
   const logout = async () => {
     try {
@@ -148,55 +145,61 @@ const App: React.FC = () => {
     }
   };
 
-  const value = useMemo(() => ({ user, loading, logout, refreshUser }), [user, loading]);
+  const contextValue = useMemo(() => ({ user, loading, logout, refreshUser }), [user, loading, refreshUser]);
 
   if (loading && !user) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-slate-400 font-medium text-sm animate-pulse tracking-wide">Connecting to horizon...</p>
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-14 h-14 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin shadow-lg" />
+          <div className="space-y-2 text-center">
+            <p className="text-slate-600 font-bold tracking-tight text-lg">Synchronizing Portfolio</p>
+            <p className="text-slate-400 text-sm font-medium animate-pulse">Establishing secure horizon connection...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={contextValue}>
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/dashboard" />} />
+          <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/dashboard" replace />} />
           
           {/* Protected Routes */}
           <Route 
             path="/dashboard" 
-            element={user ? <DashboardPage /> : <Navigate to="/auth" />} 
+            element={user ? <DashboardPage /> : <Navigate to="/auth" replace />} 
           />
           <Route 
             path="/profile" 
-            element={user ? <ProfilePage /> : <Navigate to="/auth" />} 
+            element={user ? <ProfilePage /> : <Navigate to="/auth" replace />} 
           />
           <Route 
             path="/goals" 
-            element={user ? <GoalsPage /> : <Navigate to="/auth" />} 
+            element={user ? <GoalsPage /> : <Navigate to="/auth" replace />} 
           />
           <Route 
             path="/plan" 
-            element={user ? <PlanPage /> : <Navigate to="/auth" />} 
+            element={user ? <PlanPage /> : <Navigate to="/auth" replace />} 
           />
           <Route 
             path="/settings" 
-            element={user ? <SettingsPage /> : <Navigate to="/auth" />} 
+            element={user ? <SettingsPage /> : <Navigate to="/auth" replace />} 
           />
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
       
       {/* Footer Disclaimer */}
-      <footer className="bg-slate-100 border-t border-slate-200 py-6 mt-12">
-        <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
-          <p>© 2024 FinPlanner. Disclaimer: FinPlanner is an educational tool for planning purposes only. It does not provide certified financial, legal, or tax advice. Always consult with a professional before making financial decisions.</p>
+      <footer className="bg-slate-50 border-t border-slate-200 py-10">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-4">Regulatory Notice</p>
+          <p className="max-w-3xl mx-auto text-xs text-slate-400 leading-relaxed font-medium">
+            © 2024 FinPlanner. All models are deterministic and for educational purposes only. FinPlanner is not a registered investment advisor, broker-dealer, or tax professional. Automated strategies do not guarantee returns and involve risk of capital loss. Always perform independent due diligence or consult a certified professional.
+          </p>
         </div>
       </footer>
     </AuthContext.Provider>
